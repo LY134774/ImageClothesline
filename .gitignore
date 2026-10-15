@@ -14,3 +14,6 @@ ImageClothesline/
 state.json
 state.backup.json
 state.json.pending
+
+# Local release packages
+dist/
