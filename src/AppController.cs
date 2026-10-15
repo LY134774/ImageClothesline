@@ -44,7 +44,7 @@ namespace ImageClothesline {
   static string Friendly(Exception e){if(e is UnauthorizedAccessException)return "无法读写图片，请检查文件和保存目录的权限。";if(e is OutOfMemoryException)return "图片太大或可用内存不足，这次没有完成。";if(e is NotSupportedException)return e.Message;if(e is FileFormatException)return "图片文件损坏或无法识别，其他图片仍保留。";return "这次操作没有完成："+e.Message;}
   public Task CopyAsync(ImageRecord record){return Track(async()=>{
    var image=await Task.Run(()=>ClipboardImage.FromFile(store.ImagePath(record.Id)));
-   for(int attempt=0;;attempt++){try{capture.CopyImage(image);break;}catch(ExternalException){if(attempt>=3)throw;}await Task.Delay(80);}
+   for(int attempt=0;;attempt++){try{capture.CopyImage(image,record.Hash);break;}catch(ExternalException){if(attempt>=3)throw;}await Task.Delay(80);}
    Window.ShowCopied(record.Id);
   });}
   public async void Preview(ImageRecord record){await Track(async()=>{
@@ -64,7 +64,7 @@ namespace ImageClothesline {
    Window.ShowNotice("已收纳 "+added+" 张"+(errors.Count>0?"，另有 "+errors.Count+" 个文件未加入":""),errors.Count>0);
    if(errors.Count>0)MessageBox.Show(string.Join("\n",errors.Take(5))+(errors.Count>5?"\n其余错误文件也未加入。":""),"部分图片未加入",MessageBoxButton.OK,MessageBoxImage.Information);
   });}
-  async Task ToggleCollection(bool enabled){await Track(async()=>{capture.ResetBaseline();await Task.Run(()=>store.SetPreferences(enabled,true));Window.ShowNotice(enabled?"自动收纳已开启":"自动收纳已暂停，仍可以拖入文件");});}
+  async Task ToggleCollection(bool enabled){await Track(async()=>{await Task.Run(()=>store.SetPreferences(enabled,true));capture.ResetBaseline();Window.ShowNotice(enabled?"自动收纳已开启":"自动收纳已暂停，仍可以拖入文件");});}
   async Task ToggleFileCollection(bool enabled){await Track(async()=>{capture.ResetBaseline();await Task.Run(()=>store.SetFileCollection(enabled));capture.ResetBaseline();});}
   async Task ToggleStartup(bool enabled){await Track(async()=>{try{if(startup!=null)await Task.Run(()=>startup.SetEnabled(enabled));}catch(Exception e){throw new IOException("开机启动设置未完成："+e.Message,e);}});}
   public void OpenSettings(){

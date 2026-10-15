@@ -17,6 +17,7 @@ namespace ImageClothesline {
   [DataMember] public bool StartWithWindows {get;set;}
   [DataMember] public bool CollectFiles {get;set;}
   [DataMember] public bool NoticeAcknowledged {get;set;}
+  [DataMember] public string SuppressedClipboardHash {get;set;}
   [DataMember] public List<ImageRecord> Images {get;set;}
   public StoreState(){Version=1;StartWithWindows=true;CollectFiles=true;Images=new List<ImageRecord>();}
   [OnDeserializing] void Defaults(StreamingContext context){StartWithWindows=true;CollectFiles=true;}

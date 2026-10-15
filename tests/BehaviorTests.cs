@@ -21,6 +21,19 @@ namespace ImageClothesline.Tests {
    Test("收纳新图片而不收纳文字",ClipboardImage);
    Test("收纳仅在保存成功后返回待展示图片",ClipboardCollectionResult);
    Test("自身复制不重复收纳",OwnCopy);
+   Test("删除后剪贴板同图变化不会重新收纳，重启后仍生效",DeletedClipboardImageStaysRemoved);
+   Test("剪贴板换成文字或另一张图后允许再次收纳",DeletedClipboardImageCanReturnAfterChange);
+   Test("删除后手动添加同图可立即挂回",DeletedClipboardImageCanBeImportedManually);
+   Test("删除时剪贴板已是文字不阻止再次复制图片",DeleteWithTextClipboardDoesNotSuppress);
+   Test("复制工具里的图片后删除也不会重新挂上",OwnCopyThenDeleteStaysRemoved);
+   Test("关闭程序期间剪贴板已换内容不会继续拦截旧图",ChangedClipboardWhileClosedAllowsImage);
+   Test("剪贴板短暂为空再恢复同图不会重新挂上",TransientEmptyClipboardKeepsDeletion);
+   Test("短暂空剪贴板后重启仍阻止同图恢复",TransientEmptyClipboardSurvivesRestart);
+   Test("微信短暂文字后恢复旧图不撤销删除",TransientTextClipboardKeepsDeletion);
+   Test("旧文字事件不会清除后来图片的删除标记",StaleTextEventKeepsNewDeletion);
+   Test("重开后删除原剪贴板截图仍阻止微信恢复",ReopenedClipboardDeletion);
+   Test("重开时剪贴板已经换图不误拦截旧图",ReopenedDifferentClipboard);
+   Test("带删除标记的暂停状态重开也不读取剪贴板",PausedRestartDoesNotReadClipboard);
    Test("剪贴板忙碌后可以再次读取",ClipboardBusy);
    Test("开启后只收纳随后复制的图片",ClipboardBaseline);
    Test("顶部停留和离开延迟",RevealDelay);
@@ -68,6 +81,85 @@ namespace ImageClothesline.Tests {
    c.External(null);var textTask=capture.HandleChange() as Task<ClipboardResult>;textTask.GetAwaiter().GetResult();Assert(textTask.Result==null,"文字错误触发图片展示");capture.CopyImage(ImageClothesline.ClipboardImage.FromFile(s.ImagePath(result.Result.Added.Id)));var own=capture.HandleChange() as Task<ClipboardResult>;own.GetAwaiter().GetResult();Assert(own.Result==null,"自身复制错误触发展示");
   }
   static void OwnCopy(){var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();var r=s.ImportBitmap(image);s.CompleteExport(r.Id,true);capture.CopyImage(ImageClothesline.ClipboardImage.FromFile(s.ImagePath(r.Id)));capture.HandleChange().GetAwaiter().GetResult();Assert(c.Writes==1&&!s.Snapshot().Single().Hanging,"自身复制重新挂起了图片");c.External(image);capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Single().Hanging,"外部再次复制被误判为自身复制");}
+  static void DeletedClipboardImageStaysRemoved(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();var id=s.Snapshot().Single().Id;s.Remove(id);
+   c.External(image);var repeated=capture.HandleChange().GetAwaiter().GetResult();Assert(repeated==null&&s.Snapshot().Count==0,"删除后剪贴板再次报告同一张图，图片重新挂上了");
+   var restored=new ImageStore(s.Root,new TestBin());var next=new ClipboardCapture(restored,c);c.External(image);Assert(next.HandleChange().GetAwaiter().GetResult()==null&&restored.Snapshot().Count==0,"重启后同一张图又被收纳");
+  }
+  static void DeletedClipboardImageCanReturnAfterChange(){
+   foreach(bool useText in new[]{true,false}){
+    var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+    c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);
+    c.External(useText?null:Bitmap(90,40,10));capture.HandleChange().GetAwaiter().GetResult();c.External(image);capture.HandleChange().GetAwaiter().GetResult();
+    Assert(s.Snapshot().Any(x=>x.Hash==ImageCodec.Hash(image)),"剪贴板内容确实改变后，原图仍无法再次收纳");
+   }
+  }
+  static void DeletedClipboardImageCanBeImportedManually(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);var imported=s.ImportBitmap(image);
+   Assert(imported!=null&&s.Snapshot().Single().Hanging,"手动加入被删除的图片没有立即挂回");
+  }
+  static void DeleteWithTextClipboardDoesNotSuppress(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();c.External(null);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Count==1,"删除时剪贴板已经换成文字，后来重新复制图片却没有收纳");
+  }
+  static void OwnCopyThenDeleteStaysRemoved(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();var record=s.ImportBitmap(image);
+   capture.CopyImage(ImageClothesline.ClipboardImage.FromFile(s.ImagePath(record.Id)));s.Remove(record.Id);c.External(image);
+   Assert(capture.HandleChange().GetAwaiter().GetResult()==null&&s.Snapshot().Count==0,"复制工具内图片再删除，剪贴板变化仍让图片重新挂上");
+  }
+  static void ChangedClipboardWhileClosedAllowsImage(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);c.External(null);
+   var restored=new ImageStore(s.Root,new TestBin());var afterRestart=new ClipboardCapture(restored,c);c.External(image);afterRestart.HandleChange().GetAwaiter().GetResult();
+   Assert(restored.Snapshot().Count==1,"关闭期间剪贴板已变为文字，重启后仍把旧图挡住了");
+  }
+  static void TransientEmptyClipboardKeepsDeletion(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);
+   c.Empty();capture.HandleChange().GetAwaiter().GetResult();Assert(s.HasClipboardSuppression,"短暂空剪贴板误清除了删除标记");
+   c.External(image);Assert(capture.HandleChange().GetAwaiter().GetResult()==null&&s.Snapshot().Count==0,"同图恢复后又重新挂上了");
+  }
+  static void TransientEmptyClipboardSurvivesRestart(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);c.Empty();
+   var restored=new ImageStore(s.Root,new TestBin());var next=new ClipboardCapture(restored,c);c.External(image);
+   Assert(next.HandleChange().GetAwaiter().GetResult()==null&&restored.Snapshot().Count==0,"空剪贴板期间重启后，同图再次挂上");
+  }
+  static void TransientTextClipboardKeepsDeletion(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);
+   c.Empty();capture.HandleChange().GetAwaiter().GetResult();c.External(null);var textChange=capture.HandleChange();
+   c.External(image);var restored=capture.HandleChange().GetAwaiter().GetResult();textChange.GetAwaiter().GetResult();
+   Assert(restored==null&&s.Snapshot().Count==0&&s.HasClipboardSuppression,"短暂文字清除了删除标记，微信恢复的旧图重新挂上");
+  }
+  static void StaleTextEventKeepsNewDeletion(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);
+   c.External(null);var textChange=capture.HandleChange();var different=Bitmap(30,70,180);c.External(different);capture.HandleChange().GetAwaiter().GetResult();
+   Assert(s.Snapshot().Count==1,"短暂文字期间没有正常收纳新图");s.Remove(s.Snapshot().Single().Id);textChange.GetAwaiter().GetResult();
+   c.External(different);Assert(capture.HandleChange().GetAwaiter().GetResult()==null&&s.Snapshot().Count==0,"过期文字事件清除了新图的删除标记");
+  }
+  static void ReopenedClipboardDeletion(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();
+   c.External(image);capture.HandleChange().GetAwaiter().GetResult();var restored=new ImageStore(s.Root,new TestBin());var reopened=new ClipboardCapture(restored,c);
+   Assert(restored.Snapshot().Count==1&&reopened.HandleChange().GetAwaiter().GetResult()==null,"重开时重新收纳了旧剪贴板");restored.Remove(restored.Snapshot().Single().Id);
+   c.External(null);var textChange=reopened.HandleChange();c.External(image);var result=reopened.HandleChange().GetAwaiter().GetResult();textChange.GetAwaiter().GetResult();
+   Assert(result==null&&restored.Snapshot().Count==0&&restored.HasClipboardSuppression,"重开后删除未记住当前剪贴板，旧图重新挂上");
+   c.External(Bitmap(12,34,56));reopened.HandleChange().GetAwaiter().GetResult();Assert(restored.Snapshot().Count==1,"删除保护阻止了新截图");
+  }
+  static void ReopenedDifferentClipboard(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var image=Bitmap();s.ImportBitmap(image);var c=new TestClipboard();c.External(Bitmap(12,34,56));
+   var restored=new ImageStore(s.Root,new TestBin());var capture=new ClipboardCapture(restored,c);Assert(restored.Snapshot().Count==1&&capture.HandleChange().GetAwaiter().GetResult()==null,"重开时收纳了不同的旧剪贴板图片");
+   restored.Remove(restored.Snapshot().Single().Id);Assert(!restored.HasClipboardSuppression,"删除非当前剪贴板图片错误建立了拦截");c.External(image);capture.HandleChange().GetAwaiter().GetResult();Assert(restored.Snapshot().Count==1,"重新复制旧图没有正常收纳");
+  }
+  static void PausedRestartDoesNotReadClipboard(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);c.External(Bitmap());capture.HandleChange().GetAwaiter().GetResult();s.Remove(s.Snapshot().Single().Id);s.SetPreferences(false,true);
+   int reads=c.Reads;var restored=new ImageStore(s.Root,new TestBin());var paused=new ClipboardCapture(restored,c);paused.ResetBaseline();c.External(Bitmap(12,34,56));paused.HandleChange().GetAwaiter().GetResult();
+   Assert(c.Reads==reads&&restored.Snapshot().Count==0&&restored.HasClipboardSuppression,"暂停状态重开或重置时读取了剪贴板");
+  }
   static void ClipboardBusy(){var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);c.External(Bitmap());c.Busy=true;try{capture.HandleChange().GetAwaiter().GetResult();}catch(ExternalException){}c.Busy=false;capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Count==1,"忙碌后重试没有收纳");}
   static void ClipboardBaseline(){var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());var c=new TestClipboard();c.External(Bitmap());var capture=new ClipboardCapture(s,c);s.SetPreferences(true,true);capture.ResetBaseline();capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Count==0,"开启时收纳了旧剪贴板");c.External(Bitmap(1,2,3));capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Count==1,"新复制没有收纳");}
   static void CollectedTimer(){
@@ -84,7 +176,8 @@ namespace ImageClothesline.Tests {
  public sealed class TestClipboard:IImageClipboard {
   public uint Sequence {get;private set;}
   BitmapSource image;DataObject files;public int Reads,Writes;public bool Busy;
-  public void External(BitmapSource source){files=null;image=source;Sequence++;}
+  public void External(BitmapSource source){files=source==null?new DataObject():null;if(files!=null)files.SetText("测试文字");image=source;Sequence++;}
+  public void Empty(){files=new DataObject();image=null;Sequence++;}
   public void ExternalFiles(string[] paths,bool cut=false){image=null;files=new DataObject();files.SetData(DataFormats.FileDrop,paths);files.SetData("Preferred DropEffect",new MemoryStream(BitConverter.GetBytes(cut?2:1)),false);Sequence++;}
   public ClipboardInput ReadInput(bool includeFiles){Reads++;if(Busy)throw new ExternalException("忙碌");return files==null?new ClipboardInput{Image=image}:WindowsClipboard.ReadInput(files,includeFiles);}
   public void WriteImage(ClipboardImage source){Writes++;External(source.Image);}

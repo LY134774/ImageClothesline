@@ -12,13 +12,13 @@ namespace ImageClothesline {
   public ClipboardInput ReadInput(bool includeFiles){return ReadInput(Clipboard.GetDataObject(),includeFiles);}
   internal static ClipboardInput ReadInput(IDataObject data,bool includeFiles){
    if(data!=null&&data.GetDataPresent(DataFormats.FileDrop,false)){
-    if(!includeFiles)return new ClipboardInput();
+    if(!includeFiles)return new ClipboardInput{HasFiles=true};
     var effect=data.GetData("Preferred DropEffect",false);byte[] bytes=effect as byte[];var stream=effect as MemoryStream;if(stream!=null)bytes=stream.ToArray();
     uint flags=bytes!=null&&bytes.Length>=4?BitConverter.ToUInt32(bytes,0):effect is int?unchecked((uint)(int)effect):effect is uint?(uint)effect:0;
-    if((flags&2)!=0)return new ClipboardInput();
-    return new ClipboardInput{Files=(data.GetData(DataFormats.FileDrop,false) as string[])??new string[0]};
+    if((flags&2)!=0)return new ClipboardInput{HasFiles=true};
+    return new ClipboardInput{HasFiles=true,Files=(data.GetData(DataFormats.FileDrop,false) as string[])??new string[0]};
    }
-   return new ClipboardInput{Image=ReadImage(data)};
+   return new ClipboardInput{Image=ReadImage(data),HasText=data!=null&&(data.GetDataPresent(DataFormats.UnicodeText,false)||data.GetDataPresent(DataFormats.Text,false))};
   }
   public BitmapSource ReadImage(){return ReadImage(Clipboard.GetDataObject());}
   internal static BitmapSource ReadImage(IDataObject data){

@@ -10,6 +10,7 @@ namespace ImageClothesline {
   readonly object gate=new object();
   readonly IRecycleBin bin;
   StoreState state;
+  string currentClipboardHash;
   public string Root {get;private set;}
   string IndexPath {get{return Path.Combine(Root,"state.json");}}
   string BackupPath {get{return Path.Combine(Root,"state.backup.json");}}
@@ -25,6 +26,7 @@ namespace ImageClothesline {
   public bool StartWithWindows {get{lock(gate)return state.StartWithWindows;}}
   public void SetStartWithWindows(bool enabled){lock(gate){bool previous=state.StartWithWindows;state.StartWithWindows=enabled;try{Save();}catch{state.StartWithWindows=previous;throw;}}Notify();}
   public bool CollectFiles {get{lock(gate)return state.CollectFiles;}}
+  public bool HasClipboardSuppression {get{lock(gate)return state.SuppressedClipboardHash!=null;}}
   public bool NoticeAcknowledged {get{lock(gate)return state.NoticeAcknowledged;}}
   public IList<ImageRecord> Snapshot(){lock(gate)return state.Images.OrderByDescending(x=>x.AddedUtc).Select(x=>x.Clone()).ToList();}
   public string ImagePath(string id){ValidateId(id);return Path.Combine(Root,"images",id+".png");}
@@ -64,7 +66,27 @@ namespace ImageClothesline {
   void Notify(){var handler=Changed;if(handler!=null)handler(this,EventArgs.Empty);}
   public ImageRecord ImportFile(string file){return ImportBitmap(ImageCodec.ReadFile(file));}
   public ImageRecord ImportBitmap(BitmapSource source){
-   var bitmap=ImageCodec.Normalize(source);string hash=ImageCodec.Hash(bitmap);ImageRecord result=null;
+   var bitmap=ImageCodec.Normalize(source);return ImportNormalized(bitmap,ImageCodec.Hash(bitmap));
+  }
+  public ImageRecord ImportClipboardBitmap(BitmapSource source){
+   var bitmap=ImageCodec.Normalize(source);string hash=ImageCodec.Hash(bitmap);
+   lock(gate){
+    currentClipboardHash=hash;
+    if(state.SuppressedClipboardHash==hash)return null;
+    ClearClipboardSuppression();
+   }
+   return ImportNormalized(bitmap,hash);
+  }
+  public void NoteClipboardWithoutImage(){lock(gate){currentClipboardHash=null;ClearClipboardSuppression();}}
+  public void NoteClipboardBaseline(string hash){lock(gate){currentClipboardHash=hash;if(state.SuppressedClipboardHash!=hash)ClearClipboardSuppression();}}
+  public void NoteCopiedImage(string hash){lock(gate){currentClipboardHash=hash;if(state.SuppressedClipboardHash!=hash)ClearClipboardSuppression();}}
+  void ClearClipboardSuppression(){
+   if(state.SuppressedClipboardHash==null)return;
+   string previous=state.SuppressedClipboardHash;state.SuppressedClipboardHash=null;
+   try{Save();}catch{state.SuppressedClipboardHash=previous;throw;}
+  }
+  ImageRecord ImportNormalized(BitmapSource bitmap,string hash){
+   ImageRecord result=null;
    lock(gate){var existing=state.Images.FirstOrDefault(x=>x.Hash==hash&&File.Exists(ImagePath(x.Id)));if(existing!=null)result=Rehang(existing);}
    if(result!=null){Notify();return result;}
    // Encoding is expensive; keep it outside the lock used by the UI. Recheck duplicates before committing.
@@ -92,7 +114,7 @@ namespace ImageClothesline {
   }
   public void Remove(string id){
    bool removed=false;
-   try{lock(gate){var image=state.Images.Single(x=>x.Id==id);string file=ImagePath(id);CheckOwnedFile(file);string thumbnail=ThumbnailPath(id);CheckOwnedFile(thumbnail);if(File.Exists(thumbnail))bin.Recycle(thumbnail);bin.Recycle(file);if(File.Exists(file))throw new IOException("图片尚未进入回收站，已保留记录。");state.Images.Remove(image);removed=true;
+   try{lock(gate){var image=state.Images.Single(x=>x.Id==id);string file=ImagePath(id);CheckOwnedFile(file);string thumbnail=ThumbnailPath(id);CheckOwnedFile(thumbnail);if(File.Exists(thumbnail))bin.Recycle(thumbnail);bin.Recycle(file);if(File.Exists(file))throw new IOException("图片尚未进入回收站，已保留记录。");state.Images.Remove(image);bool currentMatch=image.Hash==currentClipboardHash;if(currentMatch)state.SuppressedClipboardHash=image.Hash;removed=true;
      try{Save();}catch(Exception e){throw new IOException("图片副本已放入回收站，但记录保存失败。卡片已取下；需要找回时请打开系统回收站。",e);}
    }}finally{if(removed)Notify();}
   }
