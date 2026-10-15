@@ -33,7 +33,9 @@ namespace ImageClothesline.Tests {
    Test("PNG 透明度在保存后保留",Transparency);
    Test("GIF 和 TIFF 只保存第一帧",FirstFrame);
    RunBehaviorTests();
+   RunAutoStartTests();
    if(args.Contains("--ui"))RunUiTests();
+   if(args.Contains("--autostart-ui")||args.Contains("--startup"))Test("开机后台启动与设置开关联动",AutoStartUi);
    if(args.Contains("--settings-delete")){if(Application.Current==null)new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};Test("设置打开时悬停删除仍生效且忙碌时受保护",UiSettingsDelete);}
    if(args.Contains("--native-recycle"))RunNativeTests();
    if(args.Contains("--startup"))RunStartupTest();

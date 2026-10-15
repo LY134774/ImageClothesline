@@ -6,7 +6,7 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 
 ## 下载和打开
 
-**[下载 v0.1.0 Windows 免安装版（ZIP）](https://github.com/LY134774/ImageClothesline/releases/download/v0.1.0/ImageClothesline-v0.1.0-win-x64.zip)** · [版本说明](https://github.com/LY134774/ImageClothesline/releases/tag/v0.1.0)
+**[下载 v0.1.1 Windows 免安装版（ZIP）](https://github.com/LY134774/ImageClothesline/releases/download/v0.1.1/ImageClothesline-v0.1.1-win-x64.zip)** · [版本说明](https://github.com/LY134774/ImageClothesline/releases/tag/v0.1.1)
 
 1. 下载 ZIP，完整解压到一个固定文件夹。
 2. 双击 **ImageClothesline.exe**，保留旁边的 **ImageClothesline.exe.config**。
@@ -16,7 +16,7 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 
 - 面向 Windows 10 / Windows 11 **64 位电脑**，需要 **.NET Framework 4.8**。
 - 当前已在 Windows 10 验证；Windows 11 和其他屏幕缩放仍待实测。
-- 首个公开试用版，尚未做软件数字签名，Windows 可能显示安全提示。请核对下载来源，不要关闭系统安全防护。
+- 当前版本尚未做软件数字签名，Windows 可能显示安全提示。请核对下载来源，不要关闭系统安全防护。
 
 ## 怎么使用
 
@@ -44,6 +44,18 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 - **收纳复制的图片文件**：默认开启。关闭后不收纳文件夹里 Ctrl+C 复制的照片，截图和网页图片仍可收纳。
 
 只保存到文件夹、没有复制到剪贴板的截图，不会自动加入。文字、文件夹和剪切的文件不会收纳。
+
+## 开机自动启动与升级
+
+**默认开启**。新用户首次运行，以及旧用户首次运行 v0.1.1 时，会为当前 Windows 用户登记开机启动。登录后在托盘后台运行，不主动展开绳子，也不会改变自动收纳的开关状态。
+
+- 关闭方式：**托盘 → 设置 → 取消勾选“开机自动启动”**，关闭后会记住选择。
+- 下载后至少手动运行一次。程序移动到新文件夹后，再手动打开一次以更新启动路径。
+- 升级时先从托盘退出旧版，再解压新版并打开；已收纳的图片和设置会保留。
+- 删除程序或退回 v0.1.0 前，先关闭新版的开机启动。旧版不提供这个开关。
+- 如果 Windows“启动应用”中禁用了它，需要在那里重新允许；软件不会绕过系统的禁用设置。
+
+开机启动按 Windows 登录时机执行，系统可能延迟启动，不能保证登录后立即出现。[微软启动项说明](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)
 
 ## 保存与清理
 
@@ -75,6 +87,6 @@ src\build.cmd
 tests\run-tests.cmd --ui --native-recycle --startup
 ```
 
-构建结果在 `src/bin`。当前已有 73 项检查通过。UI 测试会操作测试窗口和鼠标，回收站测试仅处理生成的样例，请先退出正在运行的程序再执行。
+构建结果在 `src/bin`。当前已有 81 项检查通过。UI 测试会操作测试窗口和鼠标，回收站测试仅处理生成的样例，请先退出正在运行的程序再执行。
 
 </details>

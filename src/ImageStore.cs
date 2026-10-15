@@ -22,6 +22,8 @@ namespace ImageClothesline {
   }
   static void EnsureDirectory(string p){Directory.CreateDirectory(p);if((File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new IOException("图片保存目录不能是符号链接或目录联接。");}
   public bool Collecting {get{lock(gate)return state.Collecting;}}
+  public bool StartWithWindows {get{lock(gate)return state.StartWithWindows;}}
+  public void SetStartWithWindows(bool enabled){lock(gate){bool previous=state.StartWithWindows;state.StartWithWindows=enabled;try{Save();}catch{state.StartWithWindows=previous;throw;}}Notify();}
   public bool CollectFiles {get{lock(gate)return state.CollectFiles;}}
   public bool NoticeAcknowledged {get{lock(gate)return state.NoticeAcknowledged;}}
   public IList<ImageRecord> Snapshot(){lock(gate)return state.Images.OrderByDescending(x=>x.AddedUtc).Select(x=>x.Clone()).ToList();}

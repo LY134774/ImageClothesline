@@ -14,11 +14,12 @@ namespace ImageClothesline {
  [DataContract] public sealed class StoreState {
   [DataMember] public int Version {get;set;}
   [DataMember] public bool Collecting {get;set;}
+  [DataMember] public bool StartWithWindows {get;set;}
   [DataMember] public bool CollectFiles {get;set;}
   [DataMember] public bool NoticeAcknowledged {get;set;}
   [DataMember] public List<ImageRecord> Images {get;set;}
-  public StoreState(){Version=1;CollectFiles=true;Images=new List<ImageRecord>();}
-  [OnDeserializing] void Defaults(StreamingContext context){CollectFiles=true;}
+  public StoreState(){Version=1;StartWithWindows=true;CollectFiles=true;Images=new List<ImageRecord>();}
+  [OnDeserializing] void Defaults(StreamingContext context){StartWithWindows=true;CollectFiles=true;}
  }
  public interface IRecycleBin { void Recycle(string fullPath); }
  public sealed class CleanupResult { public int Removed; public readonly List<string> Errors=new List<string>(); }

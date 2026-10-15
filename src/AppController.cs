@@ -12,20 +12,21 @@ using System.Windows.Media.Imaging;
 using Forms=System.Windows.Forms;
 namespace ImageClothesline {
  public sealed class AppController:IImageActions,IDisposable {
-  readonly Application app;readonly ImageStore store;readonly ClipboardCapture capture;readonly HashSet<Task> jobs=new HashSet<Task>();readonly System.Drawing.Icon icon;
+  readonly Application app;readonly ImageStore store;readonly StartupManager startup;readonly ClipboardCapture capture;readonly HashSet<Task> jobs=new HashSet<Task>();readonly System.Drawing.Icon icon;
   readonly Forms.NotifyIcon tray;readonly Forms.ToolStripMenuItem toggle;HwndSource source;SettingsWindow settings;bool quitting,disposed;
   public ClotheslineWindow Window {get;private set;}
-  public AppController(Application app,ImageStore store,IImageClipboard imageClipboard=null){
-   this.app=app;this.store=store;capture=new ClipboardCapture(store,imageClipboard??new WindowsClipboard());Window=new ClotheslineWindow(store,this);app.MainWindow=Window;
+  public AppController(Application app,ImageStore store,IImageClipboard imageClipboard=null,StartupManager startup=null){
+   this.app=app;this.store=store;this.startup=startup;capture=new ClipboardCapture(store,imageClipboard??new WindowsClipboard());Window=new ClotheslineWindow(store,this);app.MainWindow=Window;
    icon=IconFactory.TrayIcon();tray=new Forms.NotifyIcon{Icon=icon,Text="图片晾衣绳"};var menu=new Forms.ContextMenuStrip();menu.Items.Add("显示晾衣绳",null,(s,e)=>Window.ShowLine());menu.Items.Add("隐藏晾衣绳",null,(s,e)=>Window.HideLine());menu.Items.Add(new Forms.ToolStripSeparator());
    toggle=new Forms.ToolStripMenuItem("自动收纳复制的图片");toggle.Click+=async(s,e)=>await ToggleCollection(!store.Collecting);menu.Items.Add(toggle);menu.Items.Add("设置",null,(s,e)=>OpenSettings());menu.Items.Add(new Forms.ToolStripSeparator());menu.Items.Add("退出",null,async(s,e)=>await Quit());
    menu.Opening+=(s,e)=>HoldOpen(true);menu.Closed+=(s,e)=>HoldOpen(false);tray.ContextMenuStrip=menu;tray.DoubleClick+=(s,e)=>Window.ShowLine();store.Changed+=Changed;
   }
-  public async Task Initialize(){
+  public async Task Initialize(bool automatic=false){
    Window.StartWatching();source=HwndSource.FromHwnd(Window.Handle);source.AddHook(ClipboardMessage);
    if(!Native.AddClipboardFormatListener(Window.Handle))throw new Win32Exception(Marshal.GetLastWin32Error(),"无法开启图片剪贴板监听。");tray.Visible=true;
-   if(!store.NoticeAcknowledged){var welcome=new WelcomeWindow();welcome.ShowDialog();capture.ResetBaseline();await Task.Run(()=>store.SetPreferences(welcome.EnableChosen,true));}
-   UpdateTray();Window.ShowLine();if(!string.IsNullOrEmpty(store.RecoveryNotice))Window.ShowNotice(store.RecoveryNotice,true);
+   if(!store.NoticeAcknowledged&&!automatic){var welcome=new WelcomeWindow();welcome.ShowDialog();capture.ResetBaseline();await Task.Run(()=>store.SetPreferences(welcome.EnableChosen,true));}
+   string startupError=null;if(startup!=null){try{startup.Initialize(automatic);}catch(Exception e){startupError="开机启动未能设置："+e.Message;}}
+   UpdateTray();if(!automatic)Window.ShowLine();if(!string.IsNullOrEmpty(store.RecoveryNotice)){Window.ShowLine();Window.ShowNotice(store.RecoveryNotice,true);}if(startupError!=null){Window.ShowLine();Window.ShowNotice(startupError,true);}
   }
   void Changed(object sender,EventArgs e){if(!disposed)Window.Dispatcher.BeginInvoke(new Action(UpdateTray));}
   void UpdateTray(){if(disposed)return;toggle.Checked=store.Collecting;tray.Text=store.Collecting?"图片晾衣绳 · 自动收纳中":"图片晾衣绳 · 自动收纳已暂停";}
@@ -65,9 +66,10 @@ namespace ImageClothesline {
   });}
   async Task ToggleCollection(bool enabled){await Track(async()=>{capture.ResetBaseline();await Task.Run(()=>store.SetPreferences(enabled,true));Window.ShowNotice(enabled?"自动收纳已开启":"自动收纳已暂停，仍可以拖入文件");});}
   async Task ToggleFileCollection(bool enabled){await Track(async()=>{capture.ResetBaseline();await Task.Run(()=>store.SetFileCollection(enabled));capture.ResetBaseline();});}
+  async Task ToggleStartup(bool enabled){await Track(async()=>{try{if(startup!=null)await Task.Run(()=>startup.SetEnabled(enabled));}catch(Exception e){throw new IOException("开机启动设置未完成："+e.Message,e);}});}
   public void OpenSettings(){
    if(quitting)return;if(settings!=null){settings.Activate();return;}Window.HoldOpen(true,false);
-   settings=new SettingsWindow(store,ToggleCollection,ToggleFileCollection,Cleanup,()=>{try{Process.Start(new ProcessStartInfo(store.Root){UseShellExecute=true});}catch(Exception e){Window.ShowNotice(Friendly(e),true);}});
+   settings=new SettingsWindow(store,ToggleCollection,ToggleFileCollection,Cleanup,()=>{try{Process.Start(new ProcessStartInfo(store.Root){UseShellExecute=true});}catch(Exception e){Window.ShowNotice(Friendly(e),true);}},startup==null?(Func<bool>)null:()=>startup.Enabled,ToggleStartup);
    settings.Closed+=(s,e)=>{settings=null;Window.HoldOpen(false,false);};settings.Show();
   }
   async Task Cleanup(){await Track(async()=>{
