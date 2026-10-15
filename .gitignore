@@ -1,0 +1,16 @@
+# Build outputs and local IDE files
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+
+# Generated test evidence and temporary fixtures
+tests/artifacts/
+**/fixtures-*/
+
+# Local application data, if copied into this workspace
+ImageClothesline/
+state.json
+state.backup.json
+state.json.pending
