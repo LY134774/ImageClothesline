@@ -21,6 +21,9 @@ namespace ImageClothesline.Tests {
    Test("收纳新图片而不收纳文字",ClipboardImage);
    Test("收纳仅在保存成功后返回待展示图片",ClipboardCollectionResult);
    Test("自身复制不重复收纳",OwnCopy);
+   Test("挂着的同图重复通知不提醒不排序，新图仍正常收纳",HangingClipboardImageIsQuiet);
+   Test("重开后挂着的同图仍不重复提醒",ReopenedHangingClipboardImageIsQuiet);
+   Test("并发同图只产生一次收纳提醒",ConcurrentClipboardImageIsQuiet);
    Test("删除后剪贴板同图变化不会重新收纳，重启后仍生效",DeletedClipboardImageStaysRemoved);
    Test("剪贴板换成文字或另一张图后允许再次收纳",DeletedClipboardImageCanReturnAfterChange);
    Test("删除后手动添加同图可立即挂回",DeletedClipboardImageCanBeImportedManually);
@@ -79,6 +82,30 @@ namespace ImageClothesline.Tests {
    var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);c.External(Bitmap());
    Task pending=capture.HandleChange();pending.GetAwaiter().GetResult();var result=pending as Task<ClipboardResult>;Assert(result!=null&&result.Result!=null&&File.Exists(s.ImagePath(result.Result.Added.Id)),"保存成功没有返回可展示图片");
    c.External(null);var textTask=capture.HandleChange() as Task<ClipboardResult>;textTask.GetAwaiter().GetResult();Assert(textTask.Result==null,"文字错误触发图片展示");capture.CopyImage(ImageClothesline.ClipboardImage.FromFile(s.ImagePath(result.Result.Added.Id)));var own=capture.HandleChange() as Task<ClipboardResult>;own.GetAwaiter().GetResult();Assert(own.Result==null,"自身复制错误触发展示");
+  }
+  static void HangingClipboardImageIsQuiet(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap(11,22,33);
+   c.External(image);var first=capture.HandleChange().GetAwaiter().GetResult().Added;System.Threading.Thread.Sleep(20);
+   c.External(Bitmap(44,55,66));var second=capture.HandleChange().GetAwaiter().GetResult().Added;string before=File.ReadAllText(Path.Combine(s.Root,"state.json"));int changes=0;s.Changed+=(sender,e)=>changes++;
+   foreach(int mode in new[]{0,1,2}){
+    Task textChange=null;if(mode>0){c.Empty();capture.HandleChange().GetAwaiter().GetResult();c.External(null);textChange=capture.HandleChange();if(mode==2)textChange.GetAwaiter().GetResult();}
+    c.External(image);var repeated=capture.HandleChange().GetAwaiter().GetResult();if(textChange!=null)textChange.GetAwaiter().GetResult();
+    Assert(repeated==null,"已挂着的图片被当作新图提醒");Assert(s.Snapshot().Count==2&&s.Snapshot().First().Id==second.Id,"同图重复通知新增了卡片或改变排序");
+    Assert(s.Snapshot().Single(x=>x.Id==first.Id).AddedUtc==first.AddedUtc&&File.ReadAllText(Path.Combine(s.Root,"state.json"))==before&&changes==0,"忽略同图仍改写记录或刷新界面");
+   }
+   var manual=s.ImportBitmap(image);Assert(manual!=null&&manual.Id==first.Id&&s.Snapshot().First().Id==first.Id,"手动添加同图的行为被改变");
+   s.CompleteExport(first.Id,true);c.External(image);var rehung=capture.HandleChange().GetAwaiter().GetResult();Assert(rehung!=null&&rehung.Added.Id==first.Id&&s.Snapshot().Count==2,"已取下图片不能正常重新挂起");
+   c.External(Bitmap(77,88,99));Assert(capture.HandleChange().GetAwaiter().GetResult()!=null&&s.Snapshot().Count==3,"新截图未正常收纳提醒");
+  }
+  static void ReopenedHangingClipboardImageIsQuiet(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var image=Bitmap(11,22,33);s.ImportBitmap(image);var c=new TestClipboard();c.External(image);
+   var restored=new ImageStore(s.Root,new TestBin());var capture=new ClipboardCapture(restored,c);c.External(null);var textChange=capture.HandleChange();c.External(image);var result=capture.HandleChange().GetAwaiter().GetResult();textChange.GetAwaiter().GetResult();
+   Assert(result==null&&restored.Snapshot().Count==1,"重开后挂着的同图再次触发提醒");restored.Remove(restored.Snapshot().Single().Id);c.External(image);
+   Assert(capture.HandleChange().GetAwaiter().GetResult()==null&&restored.Snapshot().Count==0&&restored.HasClipboardSuppression,"忽略同图后删除保护失效");
+  }
+  static void ConcurrentClipboardImageIsQuiet(){
+   var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());var image=Bitmap(11,22,33);var tasks=Enumerable.Range(0,8).Select(i=>Task.Run(()=>s.ImportClipboardBitmap(image))).ToArray();Task.WaitAll(tasks);
+   Assert(tasks.Count(x=>x.Result!=null)==1&&s.Snapshot().Count==1,"并发同图通知产生了多次收纳提醒");
   }
   static void OwnCopy(){var s=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());s.SetPreferences(true,true);var c=new TestClipboard();var capture=new ClipboardCapture(s,c);var image=Bitmap();var r=s.ImportBitmap(image);s.CompleteExport(r.Id,true);capture.CopyImage(ImageClothesline.ClipboardImage.FromFile(s.ImagePath(r.Id)));capture.HandleChange().GetAwaiter().GetResult();Assert(c.Writes==1&&!s.Snapshot().Single().Hanging,"自身复制重新挂起了图片");c.External(image);capture.HandleChange().GetAwaiter().GetResult();Assert(s.Snapshot().Single().Hanging,"外部再次复制被误判为自身复制");}
   static void DeletedClipboardImageStaysRemoved(){

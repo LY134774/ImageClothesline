@@ -75,7 +75,7 @@ namespace ImageClothesline {
     if(state.SuppressedClipboardHash==hash)return null;
     ClearClipboardSuppression();
    }
-   return ImportNormalized(bitmap,hash);
+   return ImportNormalized(bitmap,hash,true);
   }
   public void NoteClipboardWithoutImage(){lock(gate){currentClipboardHash=null;ClearClipboardSuppression();}}
   public void NoteClipboardBaseline(string hash){lock(gate){currentClipboardHash=hash;if(state.SuppressedClipboardHash!=hash)ClearClipboardSuppression();}}
@@ -85,15 +85,16 @@ namespace ImageClothesline {
    string previous=state.SuppressedClipboardHash;state.SuppressedClipboardHash=null;
    try{Save();}catch{state.SuppressedClipboardHash=previous;throw;}
   }
-  ImageRecord ImportNormalized(BitmapSource bitmap,string hash){
+  ImageRecord ImportNormalized(BitmapSource bitmap,string hash,bool skipHanging=false){
    ImageRecord result=null;
-   lock(gate){var existing=state.Images.FirstOrDefault(x=>x.Hash==hash&&File.Exists(ImagePath(x.Id)));if(existing!=null)result=Rehang(existing);}
+   // Clipboard updates may restore an image already on the line; do not reorder or announce it.
+   lock(gate){var existing=state.Images.FirstOrDefault(x=>x.Hash==hash&&File.Exists(ImagePath(x.Id)));if(existing!=null){if(skipHanging&&existing.Hanging)return null;result=Rehang(existing);}}
    if(result!=null){Notify();return result;}
    // Encoding is expensive; keep it outside the lock used by the UI. Recheck duplicates before committing.
    byte[] imageBytes=ImageCodec.Encode(bitmap),thumbnailBytes=ImageCodec.Encode(ImageCodec.Thumbnail(bitmap));
    lock(gate){
     var existing=state.Images.FirstOrDefault(x=>x.Hash==hash&&File.Exists(ImagePath(x.Id)));
-    if(existing!=null)result=Rehang(existing);
+    if(existing!=null){if(skipHanging&&existing.Hanging)return null;result=Rehang(existing);}
     else{
      var record=new ImageRecord{Id=Guid.NewGuid().ToString("N"),Hash=hash,AddedUtc=DateTime.UtcNow,Hanging=true,Width=bitmap.PixelWidth,Height=bitmap.PixelHeight};
      string imagePath=ImagePath(record.Id),thumbPath=ThumbnailPath(record.Id);

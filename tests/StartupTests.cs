@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Interop;
 namespace ImageClothesline.Tests {
  public static partial class TestRunner {
-  static void RunStartupTest(){Test("大图复制保持界面响应且保留完整图片",LargeCopyResponsiveness);Test("剪贴板复制重试成功后才提示且数据完整",()=>CopyRetryFeedback(false));Test("剪贴板持续忙碌不显示复制成功",()=>CopyRetryFeedback(true));Test("托盘和剪贴板监听启动关闭",StartupSmoke);Test("真实双击预览关闭后自动收起",PreviewCloseTuck);Test("剪贴板图片保存后展开且文字和自身复制不弹出",CollectionDisplay);Test("照片文件收纳与真实设置开关联动",FileCollectionDisplay);Test("删除后微信短暂文字恢复旧图不重新弹出",DeletedImageAfterTransientText);Test("重开后悬停删除仍阻止微信旧图恢复",()=>DeletedImageAfterTransientText(true,false));Test("暂停重开再开启收纳后删除仍有效",()=>DeletedImageAfterTransientText(true,true));}
+  static void RunStartupTest(){Test("大图复制保持界面响应且保留完整图片",LargeCopyResponsiveness);Test("剪贴板复制重试成功后才提示且数据完整",()=>CopyRetryFeedback(false));Test("剪贴板持续忙碌不显示复制成功",()=>CopyRetryFeedback(true));Test("托盘和剪贴板监听启动关闭",StartupSmoke);Test("真实双击预览关闭后自动收起",PreviewCloseTuck);Test("剪贴板图片保存后展开且文字和自身复制不弹出",CollectionDisplay);Test("照片文件收纳与真实设置开关联动",FileCollectionDisplay);Test("保留截图时微信选中文字不反复展开",()=>HangingImageAfterTransientText(false));Test("重开后保留截图时微信选中文字不反复展开",()=>HangingImageAfterTransientText(true));Test("删除后微信短暂文字恢复旧图不重新弹出",DeletedImageAfterTransientText);Test("重开后悬停删除仍阻止微信旧图恢复",()=>DeletedImageAfterTransientText(true,false));Test("暂停重开再开启收纳后删除仍有效",()=>DeletedImageAfterTransientText(true,true));}
   [System.Runtime.InteropServices.DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr w,IntPtr l);
   static void DeletedImageAfterTransientText(){DeletedImageAfterTransientText(false,false);}
   static void DeletedImageAfterTransientText(bool reopen,bool paused){
@@ -25,6 +25,22 @@ namespace ImageClothesline.Tests {
     clipboard.External(image);SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);Pump(500);
     Assert(store.Snapshot().Count==0&&store.HasClipboardSuppression&&!controller.Window.IsVisible,"微信短暂文字恢复旧图后，图片或晾衣绳重新出现");
    }finally{keybd_event(46,0,2,UIntPtr.Zero);if(settings!=null)settings.Close();controller.Dispose();SetCursorPos(original.X,original.Y);}
+  }
+  static void HangingImageAfterTransientText(bool reopen){
+   if(Application.Current==null)new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};Native.Point original;Native.GetCursorPos(out original);var host=new Window{Title="重复图片提醒检查",Width=360,Height=180,Left=80,Top=480};host.Show();host.Activate();Pump(100);SetCursorPos(200,550);
+   var store=new ImageStore(Path.Combine(Folder(),"store"),new TestBin());store.SetPreferences(true,true);var clipboard=new TestClipboard();var image=Bitmap(31,161,81);
+   if(reopen){store.ImportBitmap(image);clipboard.External(image);store=new ImageStore(store.Root,new TestBin());}
+   var controller=new AppController(Application.Current,store,clipboard);
+   try{
+    controller.Initialize().GetAwaiter().GetResult();if(!reopen){clipboard.External(image);SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);}
+    var timeout=System.Diagnostics.Stopwatch.StartNew();while(store.Snapshot().Count==0&&timeout.ElapsedMilliseconds<2000)Pump(30);Assert(store.Snapshot().Count==1,"样例截图未收纳");controller.Window.HideLine();Pump(400);var before=store.Snapshot().Single();
+    for(int i=0;i<3;i++){
+     clipboard.Empty();SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);clipboard.External(null);SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);Pump(i==2?400:15);
+     clipboard.External(image);SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);Pump(500);
+     Assert(!controller.Window.IsVisible&&store.Snapshot().Count==1&&store.Snapshot().Single().AddedUtc==before.AddedUtc,"微信恢复仍挂着的截图后，晾衣绳重复弹出或重新排序");
+    }
+    clipboard.External(Bitmap(91,121,211));SendMessage(controller.Window.Handle,0x031d,IntPtr.Zero,IntPtr.Zero);timeout.Restart();while((!controller.Window.IsVisible||store.Snapshot().Count<2)&&timeout.ElapsedMilliseconds<2000)Pump(30);Assert(controller.Window.IsVisible&&store.Snapshot().Count==2,"新截图未正常弹出提醒");
+   }finally{controller.Dispose();host.Close();SetCursorPos(original.X,original.Y);}
   }
   static void FileCollectionDisplay(){
    if(Application.Current==null)new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};Native.Point original;Native.GetCursorPos(out original);var host=new Window{Title="文件收纳检查",Width=360,Height=180,Left=80,Top=480};host.Show();host.Activate();Pump(100);SetCursorPos(200,550);

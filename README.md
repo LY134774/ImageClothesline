@@ -6,7 +6,7 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 
 ## 下载和打开
 
-**[下载 v0.1.2 Windows 免安装版（ZIP）](https://github.com/LY134774/ImageClothesline/releases/download/v0.1.2/ImageClothesline-v0.1.2-win-x64.zip)** · [版本说明](https://github.com/LY134774/ImageClothesline/releases/tag/v0.1.2)
+**[下载 v0.1.3 Windows 免安装版（ZIP）](https://github.com/LY134774/ImageClothesline/releases/download/v0.1.3/ImageClothesline-v0.1.3-win-x64.zip)** · [版本说明](https://github.com/LY134774/ImageClothesline/releases/tag/v0.1.3)
 
 1. 下载 ZIP，完整解压到一个固定文件夹。
 2. 双击 **ImageClothesline.exe**，保留旁边的 **ImageClothesline.exe.config**。
@@ -17,6 +17,12 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 - 面向 Windows 10 / Windows 11 **64 位电脑**，需要 **.NET Framework 4.8**。
 - 当前已在 Windows 10 验证；Windows 11 和其他屏幕缩放仍待实测。
 - 当前版本尚未做软件数字签名，Windows 可能显示安全提示。请核对下载来源，不要关闭系统安全防护。
+
+## v0.1.3 更新
+
+- 修复截图仍挂着时，在微信选中文字导致晾衣绳反复弹出的问题。
+- 已挂着的同一张图片不重复提醒、不重新排序；新截图仍正常收纳并提醒。
+- 重开软件后同样生效，手动拖入和已删除图片的保护保持原有行为。
 
 ## v0.1.2 更新
 
@@ -82,7 +88,7 @@ Windows 图片收纳小工具。图片只保存在本机，不上传、不需要
 - **拖到某个软件没反应？** 对方可能不接受拖放，可改用单击复制再粘贴。拖放被接受不代表聊天消息已发送。
 - **出现异常？** 到 [Issues](https://github.com/LY134774/ImageClothesline/issues) 描述操作步骤、Windows 版本和提示内容；截图前注意遮住私人信息。
 
-已知待观察项：鼠标点击、拖动和预览的自动检查曾出现偶发失败，后续复测正常，原因尚未确定。本轮点击专项连续 10 轮（20 次）通过，未据此修改点击逻辑。各聊天软件的完整粘贴、拖放体验仍欢迎反馈。
+已知待观察项：鼠标点击、拖动和预览的自动检查曾出现偶发失败，后续复测正常，原因尚未确定。此前点击专项连续 10 轮（20 次）通过，未据此修改点击逻辑。各聊天软件的完整粘贴、拖放体验仍欢迎反馈。
 
 <details>
 <summary>开发与测试</summary>
@@ -94,6 +100,6 @@ src\build.cmd
 tests\run-tests.cmd --ui --native-recycle --startup
 ```
 
-构建结果在 `src/bin`。本轮完整回归 97 项检查通过；点击专项连续 10 轮（20 次）通过。UI 测试会操作测试窗口和鼠标，回收站测试仅处理生成的样例，请先退出正在运行的程序再执行。
+构建结果在 `src/bin`。本轮完整回归 102 项检查通过；用户已确认真实微信操作及重开后正常。此前点击专项连续 10 轮（20 次）通过。UI 测试会操作测试窗口和鼠标，回收站测试仅处理生成的样例，请先退出正在运行的程序再执行。
 
 </details>
